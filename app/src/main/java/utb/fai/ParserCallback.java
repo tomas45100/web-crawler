@@ -1,12 +1,21 @@
 package utb.fai;
 
+import org.jsoup.Connection;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
+
+import java.io.IOException;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.LinkedList;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 import javax.swing.text.MutableAttributeSet;
 import javax.swing.text.html.HTML;
-import javax.swing.text.html.HTMLEditorKit;
+
 
 /**
  * Třída ParserCallback je používána parserem DocumentParser,
@@ -17,7 +26,7 @@ import javax.swing.text.html.HTMLEditorKit;
  * 
  * @author Tomá Dulík
  */
-class ParserCallback extends HTMLEditorKit.ParserCallback {
+class ParserCallback{
 
     /**
      * pageURI bude obsahovat URI aktuální parsované stránky. Budeme
@@ -30,14 +39,16 @@ class ParserCallback extends HTMLEditorKit.ParserCallback {
     /**
      * depth bude obsahovat aktuální hloubku zanoření
      */
-    int depth = 0, maxDepth = 5;
+    int depth = 0, maxDepth = 0;
 
     /**
      * visitedURLs je množina všech URL, které jsme již navtívili
      * (parsovali). Pokud najdeme na stránce URL, který je v této množině,
      * nebudeme jej u dále parsovat
      */
-    HashSet<URI> visitedURIs;
+    ConcurrentHashMap<Integer, URI> visitedURIs;
+
+    ConcurrentHashMap<String, Integer> foundWords = new ConcurrentHashMap<>();
 
     /**
      * foundURLs jsou všechna nová (zatím nenavštívená) URL, která na stránce
@@ -46,63 +57,59 @@ class ParserCallback extends HTMLEditorKit.ParserCallback {
      */
     LinkedList<URIinfo> foundURIs;
 
-    /** pokud debugLevel>1, budeme vypisovat debugovací hlášky na std. error */
-    int debugLevel = 0;
+    HandleLinksAndText handleLinksAndText = new HandleLinksAndText();
 
-    ParserCallback(HashSet<URI> visitedURIs, LinkedList<URIinfo> foundURIs) {
+    ParserCallback(ConcurrentHashMap<Integer, URI> visitedURIs, LinkedList<URIinfo> foundURIs) {
         this.foundURIs = foundURIs;
         this.visitedURIs = visitedURIs;
     }
 
-    /**
-     * metoda handleSimpleTag se volá např. u značky <FRAME>
-     */
-    public void handleSimpleTag(HTML.Tag t, MutableAttributeSet a, int pos) {
-        handleStartTag(t, a, pos);
-    }
-
-    public void handleStartTag(HTML.Tag t, MutableAttributeSet a, int pos) {
-        URI uri;
-        String href = null;
-        if (debugLevel > 1)
-            System.err.println("handleStartTag: " + t.toString() + ", pos=" + pos + ", attribs=" + a.toString());
-        if (depth <= maxDepth)
-            if (t == HTML.Tag.A)
-                href = (String) a.getAttribute(HTML.Attribute.HREF);
-            else if (t == HTML.Tag.FRAME)
-                href = (String) a.getAttribute(HTML.Attribute.SRC);
-        if (href != null)
-            try {
-                uri = pageURI.resolve(href);
-                if (!uri.isOpaque() && !visitedURIs.contains(uri)) {
-                    visitedURIs.add(uri);
-                    foundURIs.add(new URIinfo(uri, depth + 1));
-                    if (debugLevel > 0)
-                        System.err.println("Adding URI: " + uri.toString());
+    class HandleLinksAndText implements Runnable{
+        public void run(){
+            try{
+                Connection.Response response = Jsoup.connect(pageURI.toString()).ignoreHttpErrors(true).timeout(8000).execute();
+                
+                if(response.statusCode() < 200 || response.statusCode() >= 300){
+                    System.out.println("Preskakuji stranku, ke ktere nelze pristoupit.");
+                    return;
                 }
-            } catch (Exception e) {
-                System.err.println("Nalezeno nekorektní URI: " + href);
-                e.printStackTrace();
+                
+                Document doc = response.parse();
+                Elements links = doc.select("a");
+                for(Element link : links){
+                    if(link.hasAttr("href")){
+                        String href = link.attr("href").trim();
+                        //System.out.println(link.text() + " > " + href);
+
+                        if(href.isEmpty()){
+                            continue;
+                        }
+
+                        try{
+                            URI uri = pageURI.resolve(href);
+
+                            if("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())){
+                                foundURIs.add(new URIinfo(uri, depth+1));
+                            }
+                        }catch(IllegalArgumentException e){
+                            System.out.println("Preskakuji nevalidni link...");
+                        }
+                    }
+                }
+
+                String text = doc.text();
+                Pattern splitSeparators = Pattern.compile("[^\\p{L}\\p{N}]+");
+
+                for(String word: splitSeparators.split(text)){
+                    if(word != null && !word.isEmpty()){
+                        String foundWord = word.toLowerCase();
+
+                        foundWords.merge(foundWord, 1, Integer::sum);
+                    }
+                }
+            }catch(IOException e){
+                System.out.println("Stranka se nenacetla, preskakuji...");
             }
-
-    }
-
-    /******************************************************************
-     * V metodě handleText bude probíhat veškerá činnost, související se
-     * zjiováním četnosti slov v textovém obsahu HTML stránek.
-     * IMPLEMENTACE TÉTO METODY JE V TÉTO ÚLOZE VAŠÍM ÚKOLEM !!!!
-     * Možný postup:
-     * Ve třídě Parser (klidně v její metodě main) si vytvořte vyhledávací tabulku
-     * =instanci třídy HashMap<String,Integer> nebo TreeMap<String,Integer>.
-     * Do této tabulky si ukládejte dvojice klíč-data, kde
-     * klíčem jsou jednotlivá slova z textového obsahu HTML stránek,
-     * data typu Integer bude dosavadní počet výskytu daného slova v
-     * HTML stránkách.
-     *******************************************************************/
-    public void handleText(char[] data, int pos) {
-        System.out.println("handleText: " + String.valueOf(data) + ", pos=" + pos);
-        /**
-         * ...tady bude vaše implementace...
-         */
+        }
     }
 }
