@@ -8,30 +8,25 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-import javax.swing.text.MutableAttributeSet;
-import javax.swing.text.html.HTML;
-
-
 /**
- * Třída ParserCallback je používána parserem DocumentParser,
+ * Třída ParserCallback je používána parserem DocumentParser,
  * je implementován přímo v JDK a umí parsovat HTML do verze 3.0.
  * Při parsování (analýze) HTML stránky volá tento parser
- * jednotlivé metody třídy ParserCallback, co nám umožuje
+ * jednotlivé metody třídy ParserCallback, což nám umožuje
  * provádět s částmi HTML stránky naše vlastní akce.
  * 
- * @author Tomá Dulík
+ * @author Tomá Dulík
  */
-class ParserCallback{
+class ParserCallback {
 
     /**
      * pageURI bude obsahovat URI aktuální parsované stránky. Budeme
-     * jej vyuívat pro resolving všech URL, které v kódu stránky najdeme
-     * - předtím, než nalezené URL uložíme do foundURLs, musíme z něj udělat
+     * jej využívat pro resolving všech URL, které v kódu stránky najdeme
+     * - předtím, než nalezené URL uložžíme do foundURLs, musíme z něj udělat
      * absolutní URL!
      */
     URI pageURI;
@@ -39,19 +34,20 @@ class ParserCallback{
     /**
      * depth bude obsahovat aktuální hloubku zanoření
      */
-    int depth = 0, maxDepth = 0;
+    int depth = 0;
+    int maxDepth = 0;
 
     /**
-     * visitedURLs je množina všech URL, které jsme již navtívili
-     * (parsovali). Pokud najdeme na stránce URL, který je v této množině,
-     * nebudeme jej u dále parsovat
+     * visitedURLs je množina všech URL, které jsme již navštívili
+     * (parsovali). Pokud najdeme na stránce URL, který je v této množině,
+     * nebudeme jej už dále parsovat
      */
     ConcurrentHashMap<Integer, URI> visitedURIs;
 
     ConcurrentHashMap<String, Integer> foundWords = new ConcurrentHashMap<>();
 
     /**
-     * foundURLs jsou všechna nová (zatím nenavštívená) URL, která na stránce
+     * foundURLs jsou všechna nová (zatím nenavštívená) URL, která na stránce
      * najdeme. Poté, co projdeme celou stránku, budeme z tohoto seznamu
      * jednotlivá URL brát a zpracovávat.
      */
